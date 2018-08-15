@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2005-2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2005-2018 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -8,7 +8,7 @@
 
 
 # ====================================================================
-# Written by Andy Polyakov <appro@fy.chalmers.se> for the OpenSSL
+# Written by Andy Polyakov <appro@openssl.org> for the OpenSSL
 # project. The module is, however, dual licensed under OpenSSL and
 # CRYPTOGAMS licenses depending on where you obtain it. For further
 # details see http://www.openssl.org/~appro/cryptogams/.
@@ -30,7 +30,7 @@
 # instructions...
 
 # (*)	Engine accessing the driver in question is on my TODO list.
-#	For reference, acceleator is estimated to give 6 to 10 times
+#	For reference, accelerator is estimated to give 6 to 10 times
 #	improvement on single-threaded RSA sign. It should be noted
 #	that 6-10x improvement coefficient does not actually mean
 #	something extraordinary in terms of absolute [single-threaded]
@@ -265,7 +265,6 @@ $fname:
 .Ltail:
 	add	$np,$num,$np
 	add	$rp,$num,$rp
-	mov	$tp,$ap
 	sub	%g0,$num,%o7		! k=-num
 	ba	.Lsub
 	subcc	%g0,%g0,%g0		! clear %icc.c
@@ -278,15 +277,14 @@ $fname:
 	add	%o7,4,%o7
 	brnz	%o7,.Lsub
 	st	%o1,[$i]
-	subc	$car2,0,$car2		! handle upmost overflow bit
-	and	$tp,$car2,$ap
-	andn	$rp,$car2,$np
-	or	$ap,$np,$ap
+	subccc	$car2,0,$car2		! handle upmost overflow bit
 	sub	%g0,$num,%o7
 
 .Lcopy:
-	ld	[$ap+%o7],%o0		! copy or in-place refresh
+	ld	[$tp+%o7],%o1		! conditional copy
+	ld	[$rp+%o7],%o0
 	st	%g0,[$tp+%o7]		! zap tp
+	movcs	%icc,%o1,%o0
 	st	%o0,[$rp+%o7]
 	add	%o7,4,%o7
 	brnz	%o7,.Lcopy
@@ -300,7 +298,7 @@ ___
 ######## .Lbn_sqr_mont gives up to 20% *overall* improvement over
 ######## code without following dedicated squaring procedure.
 ########
-$sbit="%i2";		# re-use $bp!
+$sbit="%o5";
 
 $code.=<<___;
 .align	32
@@ -413,7 +411,7 @@ $code.=<<___;
 	mulx	$apj,$mul0,$acc0
 	mulx	$npj,$mul1,$acc1
 	add	$acc0,$car0,$car0
-	add	$tpj,$car1,$car1
+	add	$tpj,$sbit,$sbit
 	ld	[$ap+$j],$apj			! ap[j]
 	and	$car0,$mask,$acc0
 	ld	[$np+$j],$npj			! np[j]
@@ -422,7 +420,7 @@ $code.=<<___;
 	ld	[$tp+8],$tpj			! tp[j]
 	add	$acc0,$acc0,$acc0
 	add	$j,4,$j				! j++
-	or	$sbit,$acc0,$acc0
+	add	$sbit,$acc0,$acc0
 	srlx	$acc0,32,$sbit
 	and	$acc0,$mask,$acc0
 	cmp	$j,$num
@@ -436,12 +434,12 @@ $code.=<<___;
 	mulx	$apj,$mul0,$acc0
 	mulx	$npj,$mul1,$acc1
 	add	$acc0,$car0,$car0
-	add	$tpj,$car1,$car1
+	add	$tpj,$sbit,$sbit
 	and	$car0,$mask,$acc0
 	srlx	$car0,32,$car0
 	add	$acc1,$car1,$car1
 	add	$acc0,$acc0,$acc0
-	or	$sbit,$acc0,$acc0
+	add	$sbit,$acc0,$acc0
 	srlx	$acc0,32,$sbit
 	and	$acc0,$mask,$acc0
 	add	$acc0,$car1,$car1
@@ -449,7 +447,7 @@ $code.=<<___;
 	srlx	$car1,32,$car1
 
 	add	$car0,$car0,$car0
-	or	$sbit,$car0,$car0
+	add	$sbit,$car0,$car0
 	add	$car0,$car1,$car1
 	add	$car2,$car1,$car1
 	st	$car1,[$tp+4]
@@ -495,6 +493,9 @@ $code.=<<___;
 	mulx	$npj,$mul1,$acc1
 	add	$tpj,$car1,$car1
 	ld	[$np+$j],$npj			! np[j]
+	srlx	$car1,32,$tmp0
+	and	$car1,$mask,$car1
+	add	$tmp0,$sbit,$sbit
 	add	$acc0,$car1,$car1
 	ld	[$tp+8],$tpj			! tp[j]
 	add	$acc1,$car1,$car1
@@ -509,7 +510,7 @@ $code.=<<___;
 .Lsqr_inner2:
 	mulx	$apj,$mul0,$acc0
 	mulx	$npj,$mul1,$acc1
-	add	$tpj,$car1,$car1
+	add	$tpj,$sbit,$sbit
 	add	$acc0,$car0,$car0
 	ld	[$ap+$j],$apj			! ap[j]
 	and	$car0,$mask,$acc0
@@ -517,7 +518,7 @@ $code.=<<___;
 	srlx	$car0,32,$car0
 	add	$acc0,$acc0,$acc0
 	ld	[$tp+8],$tpj			! tp[j]
-	or	$sbit,$acc0,$acc0
+	add	$sbit,$acc0,$acc0
 	add	$j,4,$j				! j++
 	srlx	$acc0,32,$sbit
 	and	$acc0,$mask,$acc0
@@ -532,12 +533,12 @@ $code.=<<___;
 .Lsqr_no_inner2:
 	mulx	$apj,$mul0,$acc0
 	mulx	$npj,$mul1,$acc1
-	add	$tpj,$car1,$car1
+	add	$tpj,$sbit,$sbit
 	add	$acc0,$car0,$car0
 	and	$car0,$mask,$acc0
 	srlx	$car0,32,$car0
 	add	$acc0,$acc0,$acc0
-	or	$sbit,$acc0,$acc0
+	add	$sbit,$acc0,$acc0
 	srlx	$acc0,32,$sbit
 	and	$acc0,$mask,$acc0
 	add	$acc0,$car1,$car1
@@ -546,7 +547,7 @@ $code.=<<___;
 	srlx	$car1,32,$car1
 
 	add	$car0,$car0,$car0
-	or	$sbit,$car0,$car0
+	add	$sbit,$car0,$car0
 	add	$car0,$car1,$car1
 	add	$car2,$car1,$car1
 	st	$car1,[$tp+4]
@@ -591,14 +592,17 @@ $code.=<<___;
 !.Lsqr_last
 
 	mulx	$npj,$mul1,$acc1
-	add	$tpj,$car1,$car1
+	add	$tpj,$acc0,$acc0
+	srlx	$acc0,32,$tmp0
+	and	$acc0,$mask,$acc0
+	add	$tmp0,$sbit,$sbit
 	add	$acc0,$car1,$car1
 	add	$acc1,$car1,$car1
 	st	$car1,[$tp]
 	srlx	$car1,32,$car1
 
 	add	$car0,$car0,$car0		! recover $car0
-	or	$sbit,$car0,$car0
+	add	$sbit,$car0,$car0
 	add	$car0,$car1,$car1
 	add	$car2,$car1,$car1
 	st	$car1,[$tp+4]
@@ -608,7 +612,7 @@ $code.=<<___;
 	add	$tp,8,$tp
 .type	$fname,#function
 .size	$fname,(.-$fname)
-.asciz	"Montgomery Multipltication for SPARCv9, CRYPTOGAMS by <appro\@openssl.org>"
+.asciz	"Montgomery Multiplication for SPARCv9, CRYPTOGAMS by <appro\@openssl.org>"
 .align	32
 ___
 $code =~ s/\`([^\`]*)\`/eval($1)/gem;

@@ -18,9 +18,6 @@
 
 # include "internal/evp_int.h"
 
-/* FIXME: surely this is available elsewhere? */
-# define EVP_RC4_KEY_SIZE                16
-
 typedef struct {
     RC4_KEY ks;                 /* working key */
 } EVP_RC4_KEY;
@@ -61,12 +58,12 @@ static const EVP_CIPHER r4_40_cipher = {
 
 const EVP_CIPHER *EVP_rc4(void)
 {
-    return (&r4_cipher);
+    return &r4_cipher;
 }
 
 const EVP_CIPHER *EVP_rc4_40(void)
 {
-    return (&r4_40_cipher);
+    return &r4_40_cipher;
 }
 
 static int rc4_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,

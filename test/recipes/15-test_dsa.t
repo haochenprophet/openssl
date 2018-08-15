@@ -21,7 +21,7 @@ plan tests => 6;
 require_ok(srctop_file('test','recipes','tconversion.pl'));
 
 ok(run(test(["dsatest"])), "running dsatest");
-ok(run(test(["dsatest", "-app2_1"])), "running dsatest -app2_1");
+ok(run(test(["dsa_no_digest_size_test"])), "running dsa_no_digest_size_test");
 
  SKIP: {
      skip "Skipping dsa conversion test", 3
@@ -34,7 +34,7 @@ ok(run(test(["dsatest", "-app2_1"])), "running dsatest -app2_1");
 	 tconversion("dsa", srctop_file("test","testdsa.pem"), "pkey");
      };
      subtest 'dsa conversions -- public key' => sub {
-	 tconversion("dsa", srctop_file("test","testdsapub.pem"), "dsa",
-		     "-pubin", "-pubout");
+	 tconversion("msb", srctop_file("test","testdsapub.pem"), "dsa",
+		         "-pubin", "-pubout");
      };
 }

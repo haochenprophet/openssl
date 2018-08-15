@@ -1,5 +1,5 @@
 /*
- * Copyright 2005-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2005-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -120,6 +120,7 @@ static int do_blob_header(const unsigned char **in, unsigned int length,
 
     case MS_DSS1MAGIC:
         *pisdss = 1;
+        /* fall thru */
     case MS_RSA1MAGIC:
         if (*pispub == 0) {
             PEMerr(PEM_F_DO_BLOB_HEADER, PEM_R_EXPECTING_PRIVATE_KEY_BLOB);
@@ -129,6 +130,7 @@ static int do_blob_header(const unsigned char **in, unsigned int length,
 
     case MS_DSS2MAGIC:
         *pisdss = 1;
+        /* fall thru */
     case MS_RSA2MAGIC:
         if (*pispub == 1) {
             PEMerr(PEM_F_DO_BLOB_HEADER, PEM_R_EXPECTING_PUBLIC_KEY_BLOB);
@@ -283,14 +285,17 @@ static EVP_PKEY *b2i_dss(const unsigned char **in,
             goto memerr;
 
         BN_CTX_free(ctx);
+        ctx = NULL;
     }
     if (!DSA_set0_pqg(dsa, pbn, qbn, gbn))
         goto memerr;
     pbn = qbn = gbn = NULL;
     if (!DSA_set0_key(dsa, pub_key, priv_key))
         goto memerr;
+    pub_key = priv_key = NULL;
 
-    EVP_PKEY_set1_DSA(ret, dsa);
+    if (!EVP_PKEY_set1_DSA(ret, dsa))
+        goto memerr;
     DSA_free(dsa);
     *in = p;
     return ret;
@@ -343,12 +348,19 @@ static EVP_PKEY *b2i_rsa(const unsigned char **in,
             goto memerr;
         if (!read_lebn(&pin, nbyte, &d))
             goto memerr;
-        RSA_set0_factors(rsa, p, q);
-        RSA_set0_crt_params(rsa, dmp1, dmq1, iqmp);
+        if (!RSA_set0_factors(rsa, p, q))
+            goto memerr;
+        p = q = NULL;
+        if (!RSA_set0_crt_params(rsa, dmp1, dmq1, iqmp))
+            goto memerr;
+        dmp1 = dmq1 = iqmp = NULL;
     }
-    RSA_set0_key(rsa, n, e, d);
+    if (!RSA_set0_key(rsa, n, e, d))
+        goto memerr;
+    n = e = d = NULL;
 
-    EVP_PKEY_set1_RSA(ret, rsa);
+    if (!EVP_PKEY_set1_RSA(ret, rsa))
+        goto memerr;
     RSA_free(rsa);
     *in = pin;
     return ret;
@@ -432,9 +444,10 @@ static int do_i2b(unsigned char **out, EVP_PKEY *pk, int ispub)
     if (*out)
         p = *out;
     else {
-        p = OPENSSL_malloc(outlen);
-        if (p == NULL)
+        if ((p = OPENSSL_malloc(outlen)) == NULL) {
+            PEMerr(PEM_F_DO_I2B, ERR_R_MALLOC_FAILURE);
             return -1;
+        }
         *out = p;
         noinc = 1;
     }
@@ -548,7 +561,7 @@ static void write_rsa(unsigned char **out, RSA *rsa, int ispub)
     hnbyte = (RSA_bits(rsa) + 15) >> 4;
     RSA_get0_key(rsa, &n, &e, &d);
     write_lebn(out, e, 4);
-    write_lebn(out, n, -1);
+    write_lebn(out, n, nbyte);
     if (ispub)
         return;
     RSA_get0_factors(rsa, &p, &q);
@@ -673,7 +686,7 @@ static EVP_PKEY *do_PVK_body(const unsigned char **in,
             inlen = cb(psbuf, PEM_BUFSIZE, 0, u);
         else
             inlen = PEM_def_callback(psbuf, PEM_BUFSIZE, 0, u);
-        if (inlen <= 0) {
+        if (inlen < 0) {
             PEMerr(PEM_F_DO_PVK_BODY, PEM_R_BAD_PASSWORD_READ);
             goto err;
         }

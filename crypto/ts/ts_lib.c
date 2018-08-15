@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2006-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -22,10 +22,9 @@ int TS_ASN1_INTEGER_print_bio(BIO *bio, const ASN1_INTEGER *num)
     int result = 0;
     char *hex;
 
-    num_bn = BN_new();
+    num_bn = ASN1_INTEGER_to_BN(num, NULL);
     if (num_bn == NULL)
         return -1;
-    ASN1_INTEGER_to_BN(num, num_bn);
     if ((hex = BN_bn2hex(num_bn))) {
         result = BIO_write(bio, "0x", 2) > 0;
         result = result && BIO_write(bio, hex, strlen(hex)) > 0;
@@ -57,9 +56,10 @@ int TS_ext_print_bio(BIO *bio, const STACK_OF(X509_EXTENSION) *extensions)
     for (i = 0; i < n; i++) {
         ex = X509v3_get_ext(extensions, i);
         obj = X509_EXTENSION_get_object(ex);
-        i2a_ASN1_OBJECT(bio, obj);
+        if (i2a_ASN1_OBJECT(bio, obj) < 0)
+            return 0;
         critical = X509_EXTENSION_get_critical(ex);
-        BIO_printf(bio, ": %s\n", critical ? "critical" : "");
+        BIO_printf(bio, ":%s\n", critical ? " critical" : "");
         if (!X509V3_EXT_print(bio, ex, 0, 4)) {
             BIO_printf(bio, "%4s", "");
             ASN1_STRING_print(bio, X509_EXTENSION_get_data(ex));

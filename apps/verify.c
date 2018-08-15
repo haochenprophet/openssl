@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "apps.h"
+#include "progs.h"
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/x509.h>
@@ -27,7 +28,7 @@ typedef enum OPTION_choice {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP,
     OPT_ENGINE, OPT_CAPATH, OPT_CAFILE, OPT_NOCAPATH, OPT_NOCAFILE,
     OPT_UNTRUSTED, OPT_TRUSTED, OPT_CRLFILE, OPT_CRL_DOWNLOAD, OPT_SHOW_CHAIN,
-    OPT_V_ENUM,
+    OPT_V_ENUM, OPT_NAMEOPT,
     OPT_VERBOSE
 } OPTION_CHOICE;
 
@@ -51,6 +52,7 @@ const OPTIONS verify_options[] = {
         "Attempt to download CRL information for this certificate"},
     {"show_chain", OPT_SHOW_CHAIN, '-',
         "Display information about the certificate chain"},
+    {"nameopt", OPT_NAMEOPT, 's', "Various certificate name options"},
     OPT_V_OPTIONS,
 #ifndef OPENSSL_NO_ENGINE
     {"engine", OPT_ENGINE, 's', "Use engine, possibly a hardware device"},
@@ -60,6 +62,7 @@ const OPTIONS verify_options[] = {
 
 int verify_main(int argc, char **argv)
 {
+    ENGINE *e = NULL;
     STACK_OF(X509) *untrusted = NULL, *trusted = NULL;
     STACK_OF(X509_CRL) *crls = NULL;
     X509_STORE *store = NULL;
@@ -140,13 +143,17 @@ int verify_main(int argc, char **argv)
             crl_download = 1;
             break;
         case OPT_ENGINE:
-            if (setup_engine(opt_arg(), 0) == NULL) {
+            if ((e = setup_engine(opt_arg(), 0)) == NULL) {
                 /* Failure message already displayed */
                 goto end;
             }
             break;
         case OPT_SHOW_CHAIN:
             show_chain = 1;
+            break;
+        case OPT_NAMEOPT:
+            if (!set_nameopt(opt_arg()))
+                goto end;
             break;
         case OPT_VERBOSE:
             v_verbose = 1;
@@ -191,6 +198,7 @@ int verify_main(int argc, char **argv)
     sk_X509_pop_free(untrusted, X509_free);
     sk_X509_pop_free(trusted, X509_free);
     sk_X509_CRL_pop_free(crls, X509_CRL_free);
+    release_engine(e);
     return (ret < 0 ? 2 : ret);
 }
 
@@ -217,13 +225,14 @@ static int check(X509_STORE *ctx, const char *file,
 
     X509_STORE_set_flags(ctx, vflags);
     if (!X509_STORE_CTX_init(csc, ctx, x, uchain)) {
+        X509_STORE_CTX_free(csc);
         printf("error %s: X.509 store context initialization failed\n",
                (file == NULL) ? "stdin" : file);
         goto end;
     }
-    if (tchain)
+    if (tchain != NULL)
         X509_STORE_CTX_set0_trusted_stack(csc, tchain);
-    if (crls)
+    if (crls != NULL)
         X509_STORE_CTX_set0_crls(csc, crls);
     i = X509_verify_cert(csc);
     if (i > 0 && X509_STORE_CTX_get_error(csc) == X509_V_OK) {
@@ -240,7 +249,7 @@ static int check(X509_STORE *ctx, const char *file,
                 printf("depth=%d: ", j);
                 X509_NAME_print_ex_fp(stdout,
                                       X509_get_subject_name(cert),
-                                      0, XN_FLAG_ONELINE);
+                                      0, get_nameopt());
                 if (j < num_untrusted)
                     printf(" (untrusted)");
                 printf("\n");
@@ -266,10 +275,10 @@ static int cb(int ok, X509_STORE_CTX *ctx)
     X509 *current_cert = X509_STORE_CTX_get_current_cert(ctx);
 
     if (!ok) {
-        if (current_cert) {
+        if (current_cert != NULL) {
             X509_NAME_print_ex(bio_err,
                             X509_get_subject_name(current_cert),
-                            0, XN_FLAG_ONELINE);
+                            0, get_nameopt());
             BIO_printf(bio_err, "\n");
         }
         BIO_printf(bio_err, "%serror %d at %d depth lookup: %s\n",
@@ -280,6 +289,7 @@ static int cb(int ok, X509_STORE_CTX *ctx)
         switch (cert_error) {
         case X509_V_ERR_NO_EXPLICIT_POLICY:
             policies_print(ctx);
+            /* fall thru */
         case X509_V_ERR_CERT_HAS_EXPIRED:
 
             /*
@@ -305,5 +315,5 @@ static int cb(int ok, X509_STORE_CTX *ctx)
         policies_print(ctx);
     if (!v_verbose)
         ERR_clear_error();
-    return (ok);
+    return ok;
 }

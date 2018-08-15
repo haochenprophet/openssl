@@ -15,20 +15,22 @@
 #include "internal/evp_int.h"
 
 #define M_check_autoarg(ctx, arg, arglen, err) \
-        if (ctx->pmeth->flags & EVP_PKEY_FLAG_AUTOARGLEN) \
-                { \
-                size_t pksize = (size_t)EVP_PKEY_size(ctx->pkey); \
-                if (!arg) \
-                        { \
-                        *arglen = pksize; \
-                        return 1; \
-                        } \
-                else if (*arglen < pksize) \
-                        { \
-                        EVPerr(err, EVP_R_BUFFER_TOO_SMALL); /*ckerr_ignore*/\
-                        return 0; \
-                        } \
-                }
+    if (ctx->pmeth->flags & EVP_PKEY_FLAG_AUTOARGLEN) {           \
+        size_t pksize = (size_t)EVP_PKEY_size(ctx->pkey);         \
+                                                                  \
+        if (pksize == 0) {                                        \
+            EVPerr(err, EVP_R_INVALID_KEY); /*ckerr_ignore*/      \
+            return 0;                                             \
+        }                                                         \
+        if (!arg) {                                               \
+            *arglen = pksize;                                     \
+            return 1;                                             \
+        }                                                         \
+        if (*arglen < pksize) {                                   \
+            EVPerr(err, EVP_R_BUFFER_TOO_SMALL); /*ckerr_ignore*/ \
+            return 0;                                             \
+        }                                                         \
+    }
 
 int EVP_PKEY_sign_init(EVP_PKEY_CTX *ctx)
 {
@@ -253,7 +255,7 @@ int EVP_PKEY_derive_set_peer(EVP_PKEY_CTX *ctx, EVP_PKEY *peer)
     }
 
     /*
-     * ran@cryptocom.ru: For clarity.  The error is if parameters in peer are
+     * For clarity.  The error is if parameters in peer are
      * present (!missing) but don't match.  EVP_PKEY_cmp_parameters may return
      * 1 (match), 0 (don't match) and -2 (comparison is not defined).  -1
      * (different key types) is impossible here because it is checked earlier.

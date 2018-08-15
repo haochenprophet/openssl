@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -47,9 +47,10 @@ int ASYNC_WAIT_CTX_set_wait_fd(ASYNC_WAIT_CTX *ctx, const void *key,
 {
     struct fd_lookup_st *fdlookup;
 
-    fdlookup = OPENSSL_zalloc(sizeof *fdlookup);
-    if (fdlookup == NULL)
+    if ((fdlookup = OPENSSL_zalloc(sizeof(*fdlookup))) == NULL) {
+        ASYNCerr(ASYNC_F_ASYNC_WAIT_CTX_SET_WAIT_FD, ERR_R_MALLOC_FAILURE);
         return 0;
+    }
 
     fdlookup->key = key;
     fdlookup->fd = fd;
@@ -138,16 +139,34 @@ int ASYNC_WAIT_CTX_get_changed_fds(ASYNC_WAIT_CTX *ctx, OSSL_ASYNC_FD *addfd,
 
 int ASYNC_WAIT_CTX_clear_fd(ASYNC_WAIT_CTX *ctx, const void *key)
 {
-    struct fd_lookup_st *curr;
+    struct fd_lookup_st *curr, *prev;
 
     curr = ctx->fds;
+    prev = NULL;
     while (curr != NULL) {
-        if (curr->del) {
+        if (curr->del == 1) {
             /* This one has been marked deleted already so do nothing */
+            prev = curr;
             curr = curr->next;
             continue;
         }
         if (curr->key == key) {
+            /* If fd has just been added, remove it from the list */
+            if (curr->add == 1) {
+                if (ctx->fds == curr) {
+                    ctx->fds = curr->next;
+                } else {
+                    prev->next = curr->next;
+                }
+
+                /* It is responsibility of the caller to cleanup before calling
+                 * ASYNC_WAIT_CTX_clear_fd
+                 */
+                OPENSSL_free(curr);
+                ctx->numadd--;
+                return 1;
+            }
+
             /*
              * Mark it as deleted. We don't call cleanup if explicitly asked
              * to clear an fd. We assume the caller is going to do that (if
@@ -157,6 +176,7 @@ int ASYNC_WAIT_CTX_clear_fd(ASYNC_WAIT_CTX *ctx, const void *key)
             ctx->numdel++;
             return 1;
         }
+        prev = curr;
         curr = curr->next;
     }
     return 0;

@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2010-2016 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2010-2018 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the OpenSSL license (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -88,7 +88,7 @@ $pf = ($flavour =~ /nubi/i) ? $t0 : $t2;
 #
 ######################################################################
 
-$big_endian=(`echo MIPSEL | $ENV{CC} -E -`=~/MIPSEL/)?1:0 if ($ENV{CC});
+$big_endian=(`echo MIPSEB | $ENV{CC} -E -`=~/MIPSEB/)?0:1 if ($ENV{CC});
 
 for (@ARGV) {	$output=$_ if (/\w[\w\-]*\.\w+$/);	}
 open STDOUT,">$output";
@@ -105,10 +105,6 @@ $code.=<<___;
 #include "mips_arch.h"
 
 .text
-#ifdef OPENSSL_FIPSCANISTER
-# include <openssl/fipssyms.h>
-#endif
-
 #if !defined(__mips_eabi) && (!defined(__vxworks) || defined(__pic__))
 .option	pic2
 #endif
@@ -124,7 +120,7 @@ my ($i0,$i1,$i2,$i3)=($at,$t0,$t1,$t2);
 my ($t0,$t1,$t2,$t3,$t4,$t5,$t6,$t7,$t8,$t9,$t10,$t11) = map("\$$_",(12..23));
 my ($key0,$cnt)=($gp,$fp);
 
-# instuction ordering is "stolen" from output from MIPSpro assembler
+# instruction ordering is "stolen" from output from MIPSpro assembler
 # invoked with -mips3 -O3 arguments...
 $code.=<<___;
 .align	5

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -46,7 +46,7 @@ typedef struct ctlog_store_load_ctx_st {
  * Creates an empty context for loading a CT log store.
  * It should be populated before use.
  */
-static CTLOG_STORE_LOAD_CTX *ctlog_store_load_ctx_new();
+static CTLOG_STORE_LOAD_CTX *ctlog_store_load_ctx_new(void);
 
 /*
  * Deletes a CT log store load context.
@@ -54,7 +54,7 @@ static CTLOG_STORE_LOAD_CTX *ctlog_store_load_ctx_new();
  */
 static void ctlog_store_load_ctx_free(CTLOG_STORE_LOAD_CTX* ctx);
 
-static CTLOG_STORE_LOAD_CTX *ctlog_store_load_ctx_new()
+static CTLOG_STORE_LOAD_CTX *ctlog_store_load_ctx_new(void)
 {
     CTLOG_STORE_LOAD_CTX *ctx = OPENSSL_zalloc(sizeof(*ctx));
 
@@ -198,6 +198,8 @@ int CTLOG_STORE_load_file(CTLOG_STORE *store, const char *file)
     char *enabled_logs;
     CTLOG_STORE_LOAD_CTX* load_ctx = ctlog_store_load_ctx_new();
 
+    if (load_ctx == NULL)
+        return 0;
     load_ctx->log_store = store;
     load_ctx->conf = NCONF_new(NULL);
     if (load_ctx->conf == NULL)

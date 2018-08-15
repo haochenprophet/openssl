@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1999-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -41,12 +41,11 @@ X509_ALGOR *PKCS5_pbe2_set_iv(const EVP_CIPHER *cipher, int iter,
                               unsigned char *salt, int saltlen,
                               unsigned char *aiv, int prf_nid)
 {
-    X509_ALGOR *scheme = NULL, *kalg = NULL, *ret = NULL;
+    X509_ALGOR *scheme = NULL, *ret = NULL;
     int alg_nid, keylen;
     EVP_CIPHER_CTX *ctx = NULL;
     unsigned char iv[EVP_MAX_IV_LENGTH];
     PBE2PARAM *pbe2 = NULL;
-    ASN1_OBJECT *obj;
 
     alg_nid = EVP_CIPHER_type(cipher);
     if (alg_nid == NID_undef) {
@@ -54,14 +53,13 @@ X509_ALGOR *PKCS5_pbe2_set_iv(const EVP_CIPHER *cipher, int iter,
                 ASN1_R_CIPHER_HAS_NO_OBJECT_IDENTIFIER);
         goto err;
     }
-    obj = OBJ_nid2obj(alg_nid);
 
     if ((pbe2 = PBE2PARAM_new()) == NULL)
         goto merr;
 
     /* Setup the AlgorithmIdentifier for the encryption scheme */
     scheme = pbe2->encryption;
-    scheme->algorithm = obj;
+    scheme->algorithm = OBJ_nid2obj(alg_nid);
     if ((scheme->parameter = ASN1_TYPE_new()) == NULL)
         goto merr;
 
@@ -80,7 +78,7 @@ X509_ALGOR *PKCS5_pbe2_set_iv(const EVP_CIPHER *cipher, int iter,
     /* Dummy cipherinit to just setup the IV, and PRF */
     if (!EVP_CipherInit_ex(ctx, cipher, NULL, NULL, iv, 0))
         goto err;
-    if (EVP_CIPHER_param_to_asn1(ctx, scheme->parameter) < 0) {
+    if (EVP_CIPHER_param_to_asn1(ctx, scheme->parameter) <= 0) {
         ASN1err(ASN1_F_PKCS5_PBE2_SET_IV, ASN1_R_ERROR_SETTING_CIPHER_PARAMS);
         goto err;
     }
@@ -137,11 +135,9 @@ X509_ALGOR *PKCS5_pbe2_set_iv(const EVP_CIPHER *cipher, int iter,
     EVP_CIPHER_CTX_free(ctx);
     PBE2PARAM_free(pbe2);
     /* Note 'scheme' is freed as part of pbe2 */
-    X509_ALGOR_free(kalg);
     X509_ALGOR_free(ret);
 
     return NULL;
-
 }
 
 X509_ALGOR *PKCS5_pbe2_set(const EVP_CIPHER *cipher, int iter,

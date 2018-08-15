@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2000-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -59,8 +59,10 @@ struct evp_Encode_Ctx_st {
     unsigned char enc_data[80];
     /* number read on current line */
     int line_num;
-    int expect_nl;
+    unsigned int flags;
 };
 
 typedef struct evp_pbe_st EVP_PBE_CTL;
 DEFINE_STACK_OF(EVP_PBE_CTL)
+
+int is_partially_overlapping(const void *ptr1, const void *ptr2, int len);

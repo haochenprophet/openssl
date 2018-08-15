@@ -143,11 +143,6 @@ int bn_get_top(const BIGNUM *a)
     return a->top;
 }
 
-void bn_set_top(BIGNUM *a, int top)
-{
-    a->top = top;
-}
-
 int bn_get_dmax(const BIGNUM *a)
 {
     return a->dmax;
@@ -167,7 +162,8 @@ int bn_copy_words(BN_ULONG *out, const BIGNUM *in, int size)
         return 0;
 
     memset(out, 0, sizeof(*out) * size);
-    memcpy(out, in->d, sizeof(*out) * in->top);
+    if (in->d != NULL)
+        memcpy(out, in->d, sizeof(*out) * in->top);
     return 1;
 }
 
@@ -176,16 +172,20 @@ BN_ULONG *bn_get_words(const BIGNUM *a)
     return a->d;
 }
 
-void bn_set_static_words(BIGNUM *a, BN_ULONG *words, int size)
+void bn_set_static_words(BIGNUM *a, const BN_ULONG *words, int size)
 {
-    a->d = words;
+    /*
+     * |const| qualifier omission is compensated by BN_FLG_STATIC_DATA
+     * flag, which effectively means "read-only data".
+     */
+    a->d = (BN_ULONG *)words;
     a->dmax = a->top = size;
     a->neg = 0;
     a->flags |= BN_FLG_STATIC_DATA;
     bn_correct_top(a);
 }
 
-int bn_set_words(BIGNUM *a, BN_ULONG *words, int num_words)
+int bn_set_words(BIGNUM *a, const BN_ULONG *words, int num_words)
 {
     if (bn_wexpand(a, num_words) == NULL) {
         BNerr(BN_F_BN_SET_WORDS, ERR_R_MALLOC_FAILURE);
@@ -196,14 +196,4 @@ int bn_set_words(BIGNUM *a, BN_ULONG *words, int num_words)
     a->top = num_words;
     bn_correct_top(a);
     return 1;
-}
-
-size_t bn_sizeof_BIGNUM(void)
-{
-    return sizeof(BIGNUM);
-}
-
-BIGNUM *bn_array_el(BIGNUM *base, int el)
-{
-    return &base[el];
 }

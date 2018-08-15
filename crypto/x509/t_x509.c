@@ -30,12 +30,12 @@ int X509_print_ex_fp(FILE *fp, X509 *x, unsigned long nmflag,
 
     if ((b = BIO_new(BIO_s_file())) == NULL) {
         X509err(X509_F_X509_PRINT_EX_FP, ERR_R_BUF_LIB);
-        return (0);
+        return 0;
     }
     BIO_set_fp(b, fp, BIO_NOCLOSE);
     ret = X509_print_ex(b, x, nmflag, cflag);
     BIO_free(b);
-    return (ret);
+    return ret;
 }
 #endif
 
@@ -71,8 +71,13 @@ int X509_print_ex(BIO *bp, X509 *x, unsigned long nmflags,
     }
     if (!(cflag & X509_FLAG_NO_VERSION)) {
         l = X509_get_version(x);
-        if (BIO_printf(bp, "%8sVersion: %lu (0x%lx)\n", "", l + 1, l) <= 0)
-            goto err;
+        if (l >= 0 && l <= 2) {
+            if (BIO_printf(bp, "%8sVersion: %ld (0x%lx)\n", "", l + 1, (unsigned long)l) <= 0)
+                goto err;
+        } else {
+            if (BIO_printf(bp, "%8sVersion: Unknown (%ld)\n", "", l) <= 0)
+                goto err;
+        }
     }
     if (!(cflag & X509_FLAG_NO_SERIAL)) {
 
@@ -88,12 +93,15 @@ int X509_print_ex(BIO *bp, X509 *x, unsigned long nmflags,
             l = -1;
         }
         if (l != -1) {
+            unsigned long ul;
             if (bs->type == V_ASN1_NEG_INTEGER) {
-                l = -l;
+                ul = 0 - (unsigned long)l;
                 neg = "-";
-            } else
+            } else {
+                ul = l;
                 neg = "";
-            if (BIO_printf(bp, " %s%lu (%s0x%lx)\n", neg, l, neg, l) <= 0)
+            }
+            if (BIO_printf(bp, " %s%lu (%s0x%lx)\n", neg, ul, neg, ul) <= 0)
                 goto err;
         } else {
             neg = (bs->type == V_ASN1_NEG_INTEGER) ? " (Negative)" : "";
@@ -111,6 +119,9 @@ int X509_print_ex(BIO *bp, X509 *x, unsigned long nmflags,
 
     if (!(cflag & X509_FLAG_NO_SIGNAME)) {
         const X509_ALGOR *tsig_alg = X509_get0_tbs_sigalg(x);
+
+        if (BIO_puts(bp, "    ") <= 0)
+            goto err;
         if (X509_signature_print(bp, tsig_alg, NULL) <= 0)
             goto err;
     }
@@ -204,7 +215,7 @@ int X509_print_ex(BIO *bp, X509 *x, unsigned long nmflags,
     ret = 1;
  err:
     OPENSSL_free(m);
-    return (ret);
+    return ret;
 }
 
 int X509_ocspid_print(BIO *bp, X509 *x)
@@ -258,10 +269,10 @@ int X509_ocspid_print(BIO *bp, X509 *x)
     }
     BIO_printf(bp, "\n");
 
-    return (1);
+    return 1;
  err:
     OPENSSL_free(der);
-    return (0);
+    return 0;
 }
 
 int X509_signature_dump(BIO *bp, const ASN1_STRING *sig, int indent)
@@ -332,7 +343,7 @@ int X509_aux_print(BIO *out, X509 *x, int indent)
                 BIO_puts(out, ", ");
             else
                 first = 0;
-            OBJ_obj2txt(oidstr, sizeof oidstr,
+            OBJ_obj2txt(oidstr, sizeof(oidstr),
                         sk_ASN1_OBJECT_value(trust, i), 0);
             BIO_puts(out, oidstr);
         }
@@ -347,7 +358,7 @@ int X509_aux_print(BIO *out, X509 *x, int indent)
                 BIO_puts(out, ", ");
             else
                 first = 0;
-            OBJ_obj2txt(oidstr, sizeof oidstr,
+            OBJ_obj2txt(oidstr, sizeof(oidstr),
                         sk_ASN1_OBJECT_value(reject, i), 0);
             BIO_puts(out, oidstr);
         }

@@ -41,14 +41,10 @@
  */
 
 #  undef COMPILE_HW_PADLOCK
-#  if !defined(I386_ONLY) && !defined(OPENSSL_NO_ASM)
-#   if    defined(__i386__) || defined(__i386) ||    \
-        defined(__x86_64__) || defined(__x86_64) || \
-        defined(_M_IX86) || defined(_M_AMD64) || defined(_M_X64)
-#    define COMPILE_HW_PADLOCK
-#    ifdef OPENSSL_NO_DYNAMIC_ENGINE
+#  if !defined(I386_ONLY) && defined(PADLOCK_ASM)
+#   define COMPILE_HW_PADLOCK
+#   ifdef OPENSSL_NO_DYNAMIC_ENGINE
 static ENGINE *ENGINE_padlock(void);
-#    endif
 #   endif
 #  endif
 
@@ -203,10 +199,10 @@ struct padlock_cipher_data {
 };
 
 /* Interface to assembler module */
-unsigned int padlock_capability();
+unsigned int padlock_capability(void);
 void padlock_key_bswap(AES_KEY *key);
 void padlock_verify_context(struct padlock_cipher_data *ctx);
-void padlock_reload_key();
+void padlock_reload_key(void);
 void padlock_aes_block(void *out, const void *inp,
                        struct padlock_cipher_data *ctx);
 int padlock_ecb_encrypt(void *out, const void *inp,

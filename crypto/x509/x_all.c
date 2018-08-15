@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2017 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -8,7 +8,6 @@
  */
 
 #include <stdio.h>
-#include <openssl/stack.h>
 #include "internal/cryptlib.h"
 #include <openssl/buffer.h>
 #include <openssl/asn1.h>
@@ -18,6 +17,7 @@
 #include <openssl/ocsp.h>
 #include <openssl/rsa.h>
 #include <openssl/dsa.h>
+#include <openssl/x509v3.h>
 
 int X509_verify(X509 *a, EVP_PKEY *r)
 {
@@ -362,6 +362,13 @@ int X509_pubkey_digest(const X509 *data, const EVP_MD *type,
 int X509_digest(const X509 *data, const EVP_MD *type, unsigned char *md,
                 unsigned int *len)
 {
+    if (type == EVP_sha1() && (data->ex_flags & EXFLAG_SET) != 0) {
+        /* Asking for SHA1 and we already computed it. */
+        if (len != NULL)
+            *len = sizeof(data->sha1_hash);
+        memcpy(md, data->sha1_hash, sizeof(data->sha1_hash));
+        return 1;
+    }
     return (ASN1_item_digest
             (ASN1_ITEM_rptr(X509), type, (char *)data, md, len));
 }
@@ -369,6 +376,13 @@ int X509_digest(const X509 *data, const EVP_MD *type, unsigned char *md,
 int X509_CRL_digest(const X509_CRL *data, const EVP_MD *type,
                     unsigned char *md, unsigned int *len)
 {
+    if (type == EVP_sha1() && (data->flags & EXFLAG_SET) != 0) {
+        /* Asking for SHA1; always computed in CRL d2i. */
+        if (len != NULL)
+            *len = sizeof(data->sha1_hash);
+        memcpy(md, data->sha1_hash, sizeof(data->sha1_hash));
+        return 1;
+    }
     return (ASN1_item_digest
             (ASN1_ITEM_rptr(X509_CRL), type, (char *)data, md, len));
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -15,6 +15,7 @@
 # include "internal/evp_int.h"
 # include <openssl/des.h>
 # include <openssl/rand.h>
+# include "evp_locl.h"
 
 typedef struct {
     union {
@@ -282,7 +283,7 @@ static int des3_ctrl(EVP_CIPHER_CTX *ctx, int type, int arg, void *ptr)
 
     switch (type) {
     case EVP_CTRL_RAND_KEY:
-        if (RAND_bytes(ptr, EVP_CIPHER_CTX_key_length(ctx)) <= 0)
+        if (RAND_priv_bytes(ptr, EVP_CIPHER_CTX_key_length(ctx)) <= 0)
             return 0;
         DES_set_odd_parity(deskey);
         if (EVP_CIPHER_CTX_key_length(ctx) >= 16)
@@ -392,6 +393,12 @@ static int des_ede3_wrap_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
      */
     if (inl >= EVP_MAXCHUNK || inl % 8)
         return -1;
+
+    if (is_partially_overlapping(out, in, inl)) {
+        EVPerr(EVP_F_DES_EDE3_WRAP_CIPHER, EVP_R_PARTIALLY_OVERLAPPING);
+        return 0;
+    }
+
     if (EVP_CIPHER_CTX_encrypting(ctx))
         return des_ede3_wrap(ctx, out, in, inl);
     else

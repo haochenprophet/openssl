@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -17,6 +17,7 @@ NON_EMPTY_TRANSLATION_UNIT
 # include <string.h>
 # include <time.h>
 # include "apps.h"
+# include "progs.h"
 # include <openssl/bio.h>
 # include <openssl/err.h>
 # include <openssl/dsa.h>
@@ -37,7 +38,7 @@ typedef enum OPTION_choice {
 const OPTIONS dsa_options[] = {
     {"help", OPT_HELP, '-', "Display this summary"},
     {"inform", OPT_INFORM, 'f', "Input format, DER PEM PVK"},
-    {"outform", OPT_OUTFORM, 'F', "Output format, DER PEM PVK"},
+    {"outform", OPT_OUTFORM, 'f', "Output format, DER PEM PVK"},
     {"in", OPT_IN, 's', "Input key"},
     {"out", OPT_OUT, '>', "Output file"},
     {"noout", OPT_NOOUT, '-', "Don't print key out"},
@@ -96,8 +97,7 @@ int dsa_main(int argc, char **argv)
             infile = opt_arg();
             break;
         case OPT_OUTFORM:
-            if (!opt_format
-                (opt_arg(), OPT_FMT_PEMDER | OPT_FMT_PVK, &outformat))
+            if (!opt_format(opt_arg(), OPT_FMT_ANY, &outformat))
                 goto opthelp;
             break;
         case OPT_OUT:
@@ -162,7 +162,7 @@ int dsa_main(int argc, char **argv)
         else
             pkey = load_key(infile, informat, 1, passin, e, "Private Key");
 
-        if (pkey) {
+        if (pkey != NULL) {
             dsa = EVP_PKEY_get1_DSA(pkey);
             EVP_PKEY_free(pkey);
         }
@@ -200,24 +200,27 @@ int dsa_main(int argc, char **argv)
     }
     BIO_printf(bio_err, "writing DSA key\n");
     if (outformat == FORMAT_ASN1) {
-        if (pubin || pubout)
+        if (pubin || pubout) {
             i = i2d_DSA_PUBKEY_bio(out, dsa);
-        else {
+        } else {
             assert(private);
             i = i2d_DSAPrivateKey_bio(out, dsa);
         }
     } else if (outformat == FORMAT_PEM) {
-        if (pubin || pubout)
+        if (pubin || pubout) {
             i = PEM_write_bio_DSA_PUBKEY(out, dsa);
-        else {
+        } else {
             assert(private);
             i = PEM_write_bio_DSAPrivateKey(out, dsa, enc,
                                             NULL, 0, NULL, passout);
         }
-# if !defined(OPENSSL_NO_RSA) && !defined(OPENSSL_NO_RC4)
+# ifndef OPENSSL_NO_RSA
     } else if (outformat == FORMAT_MSBLOB || outformat == FORMAT_PVK) {
         EVP_PKEY *pk;
         pk = EVP_PKEY_new();
+        if (pk == NULL)
+           goto end;
+
         EVP_PKEY_set1_DSA(pk, dsa);
         if (outformat == FORMAT_PVK) {
             if (pubin) {
@@ -226,11 +229,16 @@ int dsa_main(int argc, char **argv)
                 goto end;
             }
             assert(private);
+#  ifdef OPENSSL_NO_RC4
+            BIO_printf(bio_err, "PVK format not supported\n");
+            EVP_PKEY_free(pk);
+            goto end;
+#  else
             i = i2b_PVK_bio(out, pk, pvk_encr, 0, passout);
-        }
-        else if (pubin || pubout)
+#  endif
+        } else if (pubin || pubout) {
             i = i2b_PublicKey_bio(out, pk);
-        else {
+        } else {
             assert(private);
             i = i2b_PrivateKey_bio(out, pk);
         }
@@ -249,8 +257,9 @@ int dsa_main(int argc, char **argv)
  end:
     BIO_free_all(out);
     DSA_free(dsa);
+    release_engine(e);
     OPENSSL_free(passin);
     OPENSSL_free(passout);
-    return (ret);
+    return ret;
 }
 #endif

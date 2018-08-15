@@ -107,6 +107,14 @@ my @smime_pkcs7_tests = (
 	"-CAfile", catfile($smdir, "smroot.pem"), "-out", "smtst.txt" ]
     ],
 
+    [ "signed content S/MIME format, RSA key SHA1",
+      [ "-sign", "-in", $smcont, "-md", "sha1",
+	"-certfile", catfile($smdir, "smroot.pem"),
+	"-signer", catfile($smdir, "smrsa1.pem"), "-out", "test.cms" ],
+      [ "-verify", "-in", "test.cms",
+	"-CAfile", catfile($smdir, "smroot.pem"), "-out", "smtst.txt" ]
+    ],
+
     [ "signed content test streaming S/MIME format, 2 DSA and 2 RSA keys",
       [ "-sign", "-in", $smcont, "-nodetach",
 	"-signer", catfile($smdir, "smrsa1.pem"),
@@ -338,6 +346,15 @@ my @smime_cms_param_tests = (
 	"-stream", "-out", "test.cms",
 	"-recip", catfile($smdir, "smec1.pem") ],
       [ "-decrypt", "-recip", catfile($smdir, "smec1.pem"),
+	"-in", "test.cms", "-out", "smtst.txt" ]
+    ],
+
+    [ "enveloped content test streaming S/MIME format, DES, ECDH, 2 recipients, key only used",
+      [ "-encrypt", "-in", $smcont,
+	"-stream", "-out", "test.cms",
+	catfile($smdir, "smec1.pem"),
+	catfile($smdir, "smec3.pem") ],
+      [ "-decrypt", "-inkey", catfile($smdir, "smec3.pem"),
 	"-in", "test.cms", "-out", "smtst.txt" ]
     ],
 

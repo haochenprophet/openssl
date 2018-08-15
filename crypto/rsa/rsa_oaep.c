@@ -78,11 +78,6 @@ int RSA_padding_add_PKCS1_OAEP_mgf1(unsigned char *to, int tlen,
     memcpy(db + emlen - flen - mdlen, from, (unsigned int)flen);
     if (RAND_bytes(seed, mdlen) <= 0)
         return 0;
-#ifdef PKCS_TESTVECT
-    memcpy(seed,
-           "\xaa\xfd\x12\xf6\x59\xca\xe6\x34\x89\xb4\x79\xe5\x07\x6d\xde\xc2\xf0\x6c\xb5\x8f",
-           20);
-#endif
 
     dbmask = OPENSSL_malloc(emlen - mdlen);
     if (dbmask == NULL) {
@@ -91,17 +86,21 @@ int RSA_padding_add_PKCS1_OAEP_mgf1(unsigned char *to, int tlen,
     }
 
     if (PKCS1_MGF1(dbmask, emlen - mdlen, seed, mdlen, mgf1md) < 0)
-        return 0;
+        goto err;
     for (i = 0; i < emlen - mdlen; i++)
         db[i] ^= dbmask[i];
 
     if (PKCS1_MGF1(seedmask, mdlen, db, emlen - mdlen, mgf1md) < 0)
-        return 0;
+        goto err;
     for (i = 0; i < mdlen; i++)
         seed[i] ^= seedmask[i];
 
     OPENSSL_free(dbmask);
     return 1;
+
+ err:
+    OPENSSL_free(dbmask);
+    return 0;
 }
 
 int RSA_padding_check_PKCS1_OAEP(unsigned char *to, int tlen,
@@ -118,7 +117,7 @@ int RSA_padding_check_PKCS1_OAEP_mgf1(unsigned char *to, int tlen,
                                       int plen, const EVP_MD *md,
                                       const EVP_MD *mgf1md)
 {
-    int i, dblen, mlen = -1, one_index = 0, msg_index;
+    int i, dblen = 0, mlen = -1, one_index = 0, msg_index;
     unsigned int good, found_one_byte;
     const unsigned char *maskedseed, *maskeddb;
     /*
@@ -151,32 +150,40 @@ int RSA_padding_check_PKCS1_OAEP_mgf1(unsigned char *to, int tlen,
 
     dblen = num - mdlen - 1;
     db = OPENSSL_malloc(dblen);
-    em = OPENSSL_malloc(num);
-    if (db == NULL || em == NULL) {
+    if (db == NULL) {
         RSAerr(RSA_F_RSA_PADDING_CHECK_PKCS1_OAEP_MGF1, ERR_R_MALLOC_FAILURE);
         goto cleanup;
     }
 
-    /*
-     * Always do this zero-padding copy (even when num == flen) to avoid
-     * leaking that information. The copy still leaks some side-channel
-     * information, but it's impossible to have a fixed  memory access
-     * pattern since we can't read out of the bounds of |from|.
-     *
-     * TODO(emilia): Consider porting BN_bn2bin_padded from BoringSSL.
-     */
-    memset(em, 0, num);
-    memcpy(em + num - flen, from, flen);
+    if (flen != num) {
+        em = OPENSSL_zalloc(num);
+        if (em == NULL) {
+            RSAerr(RSA_F_RSA_PADDING_CHECK_PKCS1_OAEP_MGF1,
+                   ERR_R_MALLOC_FAILURE);
+            goto cleanup;
+        }
+
+        /*
+         * Caller is encouraged to pass zero-padded message created with
+         * BN_bn2binpad, but if it doesn't, we do this zero-padding copy
+         * to avoid leaking that information. The copy still leaks some
+         * side-channel information, but it's impossible to have a fixed
+         * memory access pattern since we can't read out of the bounds of
+         * |from|.
+         */
+        memcpy(em + num - flen, from, flen);
+        from = em;
+    }
 
     /*
      * The first byte must be zero, however we must not leak if this is
      * true. See James H. Manger, "A Chosen Ciphertext  Attack on RSA
      * Optimal Asymmetric Encryption Padding (OAEP) [...]", CRYPTO 2001).
      */
-    good = constant_time_is_zero(em[0]);
+    good = constant_time_is_zero(from[0]);
 
-    maskedseed = em + 1;
-    maskeddb = em + 1 + mdlen;
+    maskedseed = from + 1;
+    maskeddb = from + 1 + mdlen;
 
     if (PKCS1_MGF1(seed, mdlen, maskeddb, dblen, mgf1md))
         goto cleanup;
@@ -235,8 +242,8 @@ int RSA_padding_check_PKCS1_OAEP_mgf1(unsigned char *to, int tlen,
     RSAerr(RSA_F_RSA_PADDING_CHECK_PKCS1_OAEP_MGF1,
            RSA_R_OAEP_DECODING_ERROR);
  cleanup:
-    OPENSSL_free(db);
-    OPENSSL_free(em);
+    OPENSSL_clear_free(db, dblen);
+    OPENSSL_clear_free(em, num);
     return mlen;
 }
 
